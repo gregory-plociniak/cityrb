@@ -169,3 +169,20 @@ The unresolved bug is still in the frontend placement interaction path, most lik
 - stale frontend assets in the browser
 - incorrect click-to-cell resolution in build mode
 - pointer events not reaching the final placement handler as expected
+
+## Resolution
+
+The placement bug was fixed in `app/javascript/pixi_app.js`.
+
+What changed:
+
+- build placement no longer depends on reconstructing board coordinates from DOM `clientX` / `clientY`
+- the app now listens for Pixi `pointertap` events on the stage in build mode
+- click coordinates are converted with `boardContainer.toLocal(event.global)`, which keeps placement in Pixi's own coordinate space
+- the diamond hit test now uses the tile footprint height (`TILE_HALF_HEIGHT`) instead of the full texture height (`TILE_HEIGHT`)
+
+Why this fixed it:
+
+- the old path mixed DOM-space pointer coordinates with Pixi camera-space transforms, which made click resolution fragile
+- the old hit test also used the full sprite texture height, not the actual board diamond footprint
+- together, those issues could cause the build click to resolve to `null`, so no placement request was sent

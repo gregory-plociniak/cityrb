@@ -25,6 +25,7 @@ export default class extends Controller {
     }
 
     this.app = app
+    console.log("[pixi controller] connect", { mode: this.mode })
     this.app.setInteractionMode?.(this.mode)
   }
 
@@ -42,6 +43,7 @@ export default class extends Controller {
     if (!["pan", "build"].includes(mode)) return
 
     this.mode = mode
+    console.log("[pixi controller] setMode", { mode })
     this.syncModeUi()
     this.app?.setInteractionMode?.(mode)
   }
