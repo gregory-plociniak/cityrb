@@ -10,5 +10,6 @@ Rails.application.routes.draw do
   # get "service-worker" => "rails/pwa#service_worker", as: :pwa_service_worker
 
   resources :building_placements, only: [:index, :create], defaults: { format: :json }
+  delete "building_placements", to: "building_placements#destroy_all", as: :destroy_all_building_placements, defaults: { format: :json }
   root "pages#index"
 end

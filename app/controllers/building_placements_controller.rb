@@ -3,6 +3,11 @@ class BuildingPlacementsController < ApplicationController
     render json: BuildingPlacement.order(:row, :col).map { |placement| serialize_placement(placement) }
   end
 
+  def destroy_all
+    BuildingPlacement.destroy_all
+    head :no_content
+  end
+
   def create
     placement = BuildingPlacement.find_or_initialize_by(
       row: building_placement_params[:row],

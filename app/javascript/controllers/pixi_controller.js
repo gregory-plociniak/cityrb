@@ -36,6 +36,11 @@ export default class extends Controller {
     this.setMode(this.mode === "road" ? "pan" : "road")
   }
 
+  async reset() {
+    await fetch("/building_placements", { method: "DELETE", headers: { "X-CSRF-Token": document.querySelector("meta[name=csrf-token]")?.content } })
+    window.location.reload()
+  }
+
   disconnect() {
     this.app?.cleanup?.()
     this.app?.destroy(true)
