@@ -58,34 +58,78 @@ export async function initPixiApp(containerId, tilesheetUrl) {
   boardContainer.x = app.screen.width / 2
   boardContainer.y = 100
 
-  // Dragging / Panning
-  app.stage.eventMode = 'static'
-  app.stage.hitArea = new Rectangle(-100000, -100000, 200000, 200000)
+  const dragState = {
+    dragThreshold: 3,
+    hasMoved: false,
+    isDragging: false,
+    lastPointerX: 0,
+    lastPointerY: 0,
+    startPointerX: 0,
+    startPointerY: 0,
+  }
 
-  let isDragging = false
-  let dragStart = { x: 0, y: 0 }
-  let cameraStart = { x: 0, y: 0 }
+  app.canvas.style.cursor = "grab"
+  app.canvas.style.touchAction = "none"
+  app.canvas.style.userSelect = "none"
+  app.canvas.style.webkitUserSelect = "none"
 
-  app.stage.on('pointerdown', (e) => {
-    isDragging = true
-    dragStart = { x: e.global.x, y: e.global.y }
-    cameraStart = { x: camera.x, y: camera.y }
-  })
+  const updateCursor = () => {
+    app.canvas.style.cursor = dragState.isDragging ? "grabbing" : "grab"
+  }
 
-  app.stage.on('pointerup', () => { isDragging = false })
-  app.stage.on('pointerupoutside', () => { isDragging = false })
+  const stopDragging = () => {
+    dragState.hasMoved = false
+    dragState.isDragging = false
+    updateCursor()
+  }
 
-  app.stage.on('pointermove', (e) => {
-    if (isDragging) {
-      const dx = e.global.x - dragStart.x
-      const dy = e.global.y - dragStart.y
-      camera.x = cameraStart.x + dx
-      camera.y = cameraStart.y + dy
+  const handlePointerDown = (event) => {
+    dragState.hasMoved = false
+    dragState.isDragging = true
+    dragState.lastPointerX = event.clientX
+    dragState.lastPointerY = event.clientY
+    dragState.startPointerX = event.clientX
+    dragState.startPointerY = event.clientY
+    updateCursor()
+  }
+
+  const handlePointerMove = (event) => {
+    if (!dragState.isDragging) return
+
+    const currentX = event.clientX
+    const currentY = event.clientY
+
+    if (!dragState.hasMoved) {
+      const totalDx = currentX - dragState.startPointerX
+      const totalDy = currentY - dragState.startPointerY
+      const distance = Math.hypot(totalDx, totalDy)
+
+      if (distance < dragState.dragThreshold) return
+
+      dragState.hasMoved = true
     }
-  })
+
+    const dx = currentX - dragState.lastPointerX
+    const dy = currentY - dragState.lastPointerY
+
+    camera.x += dx
+    camera.y += dy
+
+    dragState.lastPointerX = currentX
+    dragState.lastPointerY = currentY
+  }
+
+  const preventBrowserDrag = (event) => event.preventDefault()
+
+  app.canvas.addEventListener("dragstart", preventBrowserDrag)
+  app.canvas.addEventListener("pointerdown", handlePointerDown)
+  window.addEventListener("pointermove", handlePointerMove)
+  window.addEventListener("pointerup", stopDragging)
+  window.addEventListener("pointercancel", stopDragging)
 
   // Zooming
-  app.canvas.addEventListener('wheel', (e) => {
+
+  app.canvas.addEventListener("wheel", (e) => {
     e.preventDefault()
     
     const zoomFactor = 1.1
@@ -108,6 +152,14 @@ export async function initPixiApp(containerId, tilesheetUrl) {
     camera.x = pointerX - localX * camera.scale.x
     camera.y = pointerY - localY * camera.scale.y
   }, { passive: false })
+
+  app.cleanup = () => {
+    app.canvas.removeEventListener("dragstart", preventBrowserDrag)
+    app.canvas.removeEventListener("pointerdown", handlePointerDown)
+    window.removeEventListener("pointermove", handlePointerMove)
+    window.removeEventListener("pointerup", stopDragging)
+    window.removeEventListener("pointercancel", stopDragging)
+  }
 
   return app
 }

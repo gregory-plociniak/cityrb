@@ -11,6 +11,7 @@ export default class extends Controller {
   }
 
   disconnect() {
+    this.app?.cleanup?.()
     this.app?.destroy(true)
     this.app = null
   }

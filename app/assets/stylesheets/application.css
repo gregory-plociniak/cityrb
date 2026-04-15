@@ -8,3 +8,12 @@
  *
  * Consider organizing styles into separate files for maintainability.
  */
+
+#pixi-canvas {
+  height: 600px;
+  width: 800px;
+}
+
+#pixi-canvas canvas {
+  display: block;
+}
