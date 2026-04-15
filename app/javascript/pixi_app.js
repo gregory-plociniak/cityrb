@@ -10,7 +10,6 @@ export async function initPixiApp(containerId, { tilesheetUrl, buildingPlacement
   const containerElement = document.getElementById(containerId)
   const app = new Application()
   let interactionMode = "pan"
-  const debugLog = (...args) => console.log("[pixi build]", ...args)
   const globalPointerPoint = new Point()
 
   await app.init({
@@ -86,8 +85,6 @@ export async function initPixiApp(containerId, { tilesheetUrl, buildingPlacement
   const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content
 
   const persistBuildingPlacement = async ({ row, col, buildingKey }) => {
-    debugLog("persist:start", { row, col, buildingKey, csrfTokenPresent: Boolean(csrfToken) })
-
     const response = await fetch("/building_placements", {
       method: "POST",
       headers: {
@@ -101,7 +98,6 @@ export async function initPixiApp(containerId, { tilesheetUrl, buildingPlacement
     })
 
     const payload = await response.json().catch(() => ({}))
-    debugLog("persist:response", { ok: response.ok, status: response.status, payload })
 
     if (!response.ok) {
       const details = payload.errors?.join(", ") || `Request failed with status ${response.status}`
@@ -114,42 +110,13 @@ export async function initPixiApp(containerId, { tilesheetUrl, buildingPlacement
   const handleTileTap = async (row, col) => {
     const key = cellKey(row, col)
 
-    debugLog("tileTap:received", {
-      row,
-      col,
-      key,
-      interactionMode,
-      tapEligible: dragState.tapEligible,
-      alreadyPlaced: placedBuildingsByCell.has(key),
-      pending: pendingPlacements.has(key),
-    })
-
-    if (interactionMode !== "build") {
-      debugLog("tileTap:ignored", { reason: "not-build-mode" })
-      return
-    }
-
-    if (!dragState.tapEligible) {
-      debugLog("tileTap:ignored", { reason: "tap-not-eligible" })
-      return
-    }
-
-    if (placedBuildingsByCell.has(key)) {
-      debugLog("tileTap:ignored", { reason: "cell-already-occupied", key })
-      return
-    }
-
-    if (pendingPlacements.has(key)) {
-      debugLog("tileTap:ignored", { reason: "cell-already-pending", key })
-      return
-    }
+    if (interactionMode !== "build") return
+    if (!dragState.tapEligible || placedBuildingsByCell.has(key) || pendingPlacements.has(key)) return
 
     pendingPlacements.add(key)
-    debugLog("tileTap:persisting", { row, col, key })
 
     try {
       const placement = await persistBuildingPlacement({ row, col, buildingKey: BUILDING_KEY })
-      debugLog("tileTap:success", placement)
       renderBuilding({
         row: placement.row,
         col: placement.col,
@@ -159,7 +126,6 @@ export async function initPixiApp(containerId, { tilesheetUrl, buildingPlacement
       console.error("Failed to persist building placement", error)
     } finally {
       pendingPlacements.delete(key)
-      debugLog("tileTap:finished", { key, pendingCount: pendingPlacements.size })
     }
   }
 
@@ -212,23 +178,10 @@ export async function initPixiApp(containerId, { tilesheetUrl, buildingPlacement
       })
     })
 
-    if (!bestMatch) {
-      debugLog("resolveCell:out-of-bounds", { boardX, boardY, rowFloat, colFloat })
-      return null
-    }
+    if (!bestMatch) return null
 
-    if (bestMatch.score > 1.05) {
-      debugLog("resolveCell:outside-diamond", {
-        boardX,
-        boardY,
-        rowFloat,
-        colFloat,
-        bestMatch,
-      })
-      return null
-    }
+    if (bestMatch.score > 1.05) return null
 
-    debugLog("resolveCell:success", { boardX, boardY, rowFloat, colFloat, bestMatch })
     return { row: bestMatch.row, col: bestMatch.col }
   }
 
@@ -239,17 +192,6 @@ export async function initPixiApp(containerId, { tilesheetUrl, buildingPlacement
 
     globalPointerPoint.set(canvasX, canvasY)
     const boardPoint = boardContainer.toLocal(globalPointerPoint)
-
-    debugLog("pointer:boardPoint", {
-      clientX: event.clientX,
-      clientY: event.clientY,
-      canvasX,
-      canvasY,
-      globalX: globalPointerPoint.x,
-      globalY: globalPointerPoint.y,
-      boardX: boardPoint.x,
-      boardY: boardPoint.y,
-    })
 
     return resolveCellFromBoardPoint(boardPoint.x, boardPoint.y)
   }
@@ -358,12 +300,6 @@ export async function initPixiApp(containerId, { tilesheetUrl, buildingPlacement
   }
 
   const handlePointerDown = (event) => {
-    debugLog("pointerdown", {
-      interactionMode,
-      clientX: event.clientX,
-      clientY: event.clientY,
-    })
-
     dragState.pointerIsDown = true
     dragState.hasMoved = false
     dragState.tapEligible = true
@@ -390,10 +326,6 @@ export async function initPixiApp(containerId, { tilesheetUrl, buildingPlacement
 
       dragState.hasMoved = true
       dragState.tapEligible = false
-      debugLog("pointermove:drag-threshold-exceeded", {
-        interactionMode,
-        distance,
-      })
       if (interactionMode === "pan") {
         hasInteracted = true
       }
@@ -416,20 +348,11 @@ export async function initPixiApp(containerId, { tilesheetUrl, buildingPlacement
   }
 
   const handlePointerUp = (event) => {
-    debugLog("pointerup", {
-      interactionMode,
-      tapEligible: dragState.tapEligible,
-      pointerIsDown: dragState.pointerIsDown,
-    })
-
     if (interactionMode === "build" && dragState.pointerIsDown && dragState.tapEligible) {
       const cell = resolveCellFromPointerEvent(event)
 
       if (cell) {
-        debugLog("pointerup:cell", cell)
         handleTileTap(cell.row, cell.col)
-      } else {
-        debugLog("pointerup:no-cell")
       }
     }
 
@@ -440,7 +363,6 @@ export async function initPixiApp(containerId, { tilesheetUrl, buildingPlacement
     if (!["pan", "build"].includes(mode)) return
 
     interactionMode = mode
-    debugLog("mode:set", { mode })
     stopDragging()
   }
 
