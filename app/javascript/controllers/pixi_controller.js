@@ -2,7 +2,7 @@ import { Controller } from "@hotwired/stimulus"
 import { initPixiApp } from "pixi_app"
 
 export default class extends Controller {
-  static targets = ["canvas", "buildingButton", "modeLabel"]
+  static targets = ["canvas", "buildingButton", "roadButton", "modeLabel"]
 
   static values = {
     buildingPlacements: Array,
@@ -32,6 +32,10 @@ export default class extends Controller {
     this.setMode(this.mode === "build" ? "pan" : "build")
   }
 
+  toggleRoadMode() {
+    this.setMode(this.mode === "road" ? "pan" : "road")
+  }
+
   disconnect() {
     this.app?.cleanup?.()
     this.app?.destroy(true)
@@ -39,7 +43,7 @@ export default class extends Controller {
   }
 
   setMode(mode) {
-    if (!["pan", "build"].includes(mode)) return
+    if (!["pan", "build", "road"].includes(mode)) return
 
     this.mode = mode
     this.syncModeUi()
@@ -48,10 +52,17 @@ export default class extends Controller {
 
   syncModeUi() {
     const buildModeActive = this.mode === "build"
+    const roadModeActive = this.mode === "road"
 
     this.element.dataset.mode = this.mode
     this.buildingButtonTarget.classList.toggle("is-active", buildModeActive)
     this.buildingButtonTarget.setAttribute("aria-pressed", String(buildModeActive))
-    this.modeLabelTarget.textContent = `Mode: ${buildModeActive ? "Build" : "Pan"}`
+    this.roadButtonTarget.classList.toggle("is-active", roadModeActive)
+    this.roadButtonTarget.setAttribute("aria-pressed", String(roadModeActive))
+
+    let label = "Pan"
+    if (buildModeActive) label = "Build"
+    if (roadModeActive) label = "Road"
+    this.modeLabelTarget.textContent = `Mode: ${label}`
   }
 }

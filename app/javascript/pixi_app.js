@@ -34,8 +34,13 @@ export async function initPixiApp(containerId, { tilesheetUrl, buildingPlacement
     frame: new Rectangle(TILE_WIDTH, 0, TILE_WIDTH, TILE_HEIGHT)
   })
 
+  const roadColTexture = new Texture({ source: baseTexture.source, frame: new Rectangle(134, 128, TILE_WIDTH, TILE_HEIGHT) })
+  const roadRowTexture = new Texture({ source: baseTexture.source, frame: new Rectangle(402, 128, TILE_WIDTH, TILE_HEIGHT) })
+
   const texturesByKey = {
-    [BUILDING_KEY]: buildingTexture
+    [BUILDING_KEY]: buildingTexture,
+    road_col: roadColTexture,
+    road_row: roadRowTexture,
   }
 
   // 4. Orthographic Camera Implementation
@@ -49,6 +54,12 @@ export async function initPixiApp(containerId, { tilesheetUrl, buildingPlacement
 
   const placedBuildingsByCell = new Map()
   const pendingPlacements = new Set()
+
+  const roadState = {
+    axis: null,
+    originCell: null,
+    ghostSprites: new Map(),
+  }
 
   const cellKey = (row, col) => `${row},${col}`
   const screenPositionFor = (row, col) => ({
@@ -284,12 +295,39 @@ export async function initPixiApp(containerId, { tilesheetUrl, buildingPlacement
   app.canvas.style.webkitUserSelect = "none"
 
   const updateCursor = () => {
-    if (interactionMode === "build") {
+    if (interactionMode === "build" || interactionMode === "road") {
       app.canvas.style.cursor = "crosshair"
       return
     }
 
     app.canvas.style.cursor = dragState.isDragging ? "grabbing" : "grab"
+  }
+
+  const clearRoadGhosts = () => {
+    roadState.ghostSprites.forEach(({ sprite }) => {
+      boardContainer.removeChild(sprite)
+      sprite.destroy()
+    })
+    roadState.ghostSprites.clear()
+  }
+
+  const handleRoadTilePaint = (row, col, buildingKey) => {
+    const key = cellKey(row, col)
+    if (placedBuildingsByCell.has(key)) return
+    if (roadState.ghostSprites.has(key)) return
+
+    const texture = texturesByKey[buildingKey]
+    if (!texture) return
+
+    const sprite = new Sprite(texture)
+    const { x, y } = screenPositionFor(row, col)
+    sprite.anchor.set(0.5, 0)
+    sprite.x = x
+    sprite.y = y
+    sprite.zIndex = row + col + 0.5
+    sprite.alpha = 0.5
+    boardContainer.addChild(sprite)
+    roadState.ghostSprites.set(key, { sprite, row, col, buildingKey })
   }
 
   const stopDragging = () => {
@@ -308,6 +346,13 @@ export async function initPixiApp(containerId, { tilesheetUrl, buildingPlacement
     dragState.startPointerX = event.clientX
     dragState.startPointerY = event.clientY
     dragState.isDragging = interactionMode === "pan"
+
+    if (interactionMode === "road") {
+      clearRoadGhosts()
+      roadState.originCell = resolveCellFromPointerEvent(event)
+      roadState.axis = null
+    }
+
     updateCursor()
   }
 
@@ -329,6 +374,38 @@ export async function initPixiApp(containerId, { tilesheetUrl, buildingPlacement
       if (interactionMode === "pan") {
         hasInteracted = true
       }
+    }
+
+    if (interactionMode === "road") {
+      const currentCell = resolveCellFromPointerEvent(event)
+      if (!currentCell || !roadState.originCell) return
+
+      if (!roadState.axis) {
+        const totalDx = currentX - dragState.startPointerX
+        const totalDy = currentY - dragState.startPointerY
+        roadState.axis = Math.abs(totalDx) > Math.abs(totalDy) ? "col" : "row"
+      }
+
+      clearRoadGhosts()
+      const { originCell, axis } = roadState
+      const buildingKey = axis === "col" ? "road_col" : "road_row"
+
+      if (axis === "col") {
+        const row = originCell.row
+        const colStart = Math.min(originCell.col, currentCell.col)
+        const colEnd = Math.max(originCell.col, currentCell.col)
+        for (let col = colStart; col <= colEnd; col++) {
+          handleRoadTilePaint(row, col, buildingKey)
+        }
+      } else {
+        const col = originCell.col
+        const rowStart = Math.min(originCell.row, currentCell.row)
+        const rowEnd = Math.max(originCell.row, currentCell.row)
+        for (let row = rowStart; row <= rowEnd; row++) {
+          handleRoadTilePaint(row, col, buildingKey)
+        }
+      }
+      return
     }
 
     if (interactionMode !== "pan") {
@@ -356,12 +433,28 @@ export async function initPixiApp(containerId, { tilesheetUrl, buildingPlacement
       }
     }
 
+    if (interactionMode === "road" && roadState.ghostSprites.size > 0) {
+      roadState.ghostSprites.forEach(({ sprite, row, col, buildingKey }) => {
+        sprite.alpha = 1
+        placedBuildingsByCell.set(cellKey(row, col), sprite)
+        persistBuildingPlacement({ row, col, buildingKey }).catch((error) => {
+          console.error("Failed to persist road placement", error)
+        })
+      })
+      roadState.ghostSprites.clear()
+      roadState.originCell = null
+      roadState.axis = null
+    }
+
     stopDragging()
   }
 
   const setInteractionMode = (mode) => {
-    if (!["pan", "build"].includes(mode)) return
+    if (!["pan", "build", "road"].includes(mode)) return
 
+    clearRoadGhosts()
+    roadState.originCell = null
+    roadState.axis = null
     interactionMode = mode
     stopDragging()
   }
