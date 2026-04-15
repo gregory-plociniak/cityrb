@@ -58,6 +58,7 @@ export async function initPixiApp(containerId, { tilesheetUrl, buildingPlacement
   const roadState = {
     axis: null,
     originCell: null,
+    currentCell: null,
     ghostSprites: new Map(),
   }
 
@@ -330,6 +331,30 @@ export async function initPixiApp(containerId, { tilesheetUrl, buildingPlacement
     roadState.ghostSprites.set(key, { sprite, row, col, buildingKey })
   }
 
+  const repaintRoadGhosts = () => {
+    const { originCell, currentCell, axis } = roadState
+    if (!originCell || !currentCell || !axis) return
+
+    clearRoadGhosts()
+    const buildingKey = axis === "col" ? "road_col" : "road_row"
+
+    if (axis === "col") {
+      const row = originCell.row
+      const colStart = Math.min(originCell.col, currentCell.col)
+      const colEnd = Math.max(originCell.col, currentCell.col)
+      for (let col = colStart; col <= colEnd; col++) {
+        handleRoadTilePaint(row, col, buildingKey)
+      }
+    } else {
+      const col = originCell.col
+      const rowStart = Math.min(originCell.row, currentCell.row)
+      const rowEnd = Math.max(originCell.row, currentCell.row)
+      for (let row = rowStart; row <= rowEnd; row++) {
+        handleRoadTilePaint(row, col, buildingKey)
+      }
+    }
+  }
+
   const stopDragging = () => {
     dragState.pointerIsDown = false
     dragState.hasMoved = false
@@ -386,25 +411,8 @@ export async function initPixiApp(containerId, { tilesheetUrl, buildingPlacement
         roadState.axis = Math.abs(totalDx) > Math.abs(totalDy) ? "col" : "row"
       }
 
-      clearRoadGhosts()
-      const { originCell, axis } = roadState
-      const buildingKey = axis === "col" ? "road_col" : "road_row"
-
-      if (axis === "col") {
-        const row = originCell.row
-        const colStart = Math.min(originCell.col, currentCell.col)
-        const colEnd = Math.max(originCell.col, currentCell.col)
-        for (let col = colStart; col <= colEnd; col++) {
-          handleRoadTilePaint(row, col, buildingKey)
-        }
-      } else {
-        const col = originCell.col
-        const rowStart = Math.min(originCell.row, currentCell.row)
-        const rowEnd = Math.max(originCell.row, currentCell.row)
-        for (let row = rowStart; row <= rowEnd; row++) {
-          handleRoadTilePaint(row, col, buildingKey)
-        }
-      }
+      roadState.currentCell = currentCell
+      repaintRoadGhosts()
       return
     }
 
@@ -454,9 +462,18 @@ export async function initPixiApp(containerId, { tilesheetUrl, buildingPlacement
 
     clearRoadGhosts()
     roadState.originCell = null
+    roadState.currentCell = null
     roadState.axis = null
     interactionMode = mode
     stopDragging()
+  }
+
+  const handleKeyDown = (event) => {
+    if (event.key !== "r" && event.key !== "R") return
+    if (interactionMode !== "road" || !roadState.axis || !dragState.hasMoved) return
+
+    roadState.axis = roadState.axis === "col" ? "row" : "col"
+    repaintRoadGhosts()
   }
 
   const preventBrowserDrag = (event) => event.preventDefault()
@@ -466,6 +483,7 @@ export async function initPixiApp(containerId, { tilesheetUrl, buildingPlacement
   window.addEventListener("pointermove", handlePointerMove)
   window.addEventListener("pointerup", handlePointerUp)
   window.addEventListener("pointercancel", stopDragging)
+  window.addEventListener("keydown", handleKeyDown)
 
   // Zooming
 
@@ -501,6 +519,7 @@ export async function initPixiApp(containerId, { tilesheetUrl, buildingPlacement
     window.removeEventListener("pointermove", handlePointerMove)
     window.removeEventListener("pointerup", handlePointerUp)
     window.removeEventListener("pointercancel", stopDragging)
+    window.removeEventListener("keydown", handleKeyDown)
   }
 
   app.setInteractionMode = setInteractionMode
